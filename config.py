@@ -1,0 +1,55 @@
+"""
+Settings for the scraper. Edit this file to change what and where you collect.
+"""
+
+# Each category maps to a list of OpenStreetMap tag filters.
+# Format: (key, value). value=None means "any value for this key".
+CATEGORIES = {
+    "coffee_shop": [("amenity", "cafe")],
+    "restaurant": [("amenity", "restaurant"), ("amenity", "fast_food")],
+    "grocery": [
+        ("shop", "supermarket"),
+        ("shop", "convenience"),
+        ("shop", "greengrocer"),
+        ("shop", "deli"),
+    ],
+    "food_retailer": [
+        ("shop", "bakery"),
+        ("shop", "butcher"),
+        ("shop", "seafood"),
+        ("shop", "beverages"),
+        ("shop", "confectionery"),
+        ("shop", "food"),
+    ],
+    # OSM coverage is weak for these two. Pair them with ABR / paid Google data later.
+    "food_wholesaler": [("shop", "wholesale"), ("wholesale", None)],
+    "food_brand": [("industrial", "food_industry"), ("craft", "brewery"), ("craft", "winery")],
+}
+
+# Regions. Each state is looked up by its official ISO code, so you can
+# go Australia-wide just by listing all of them.
+REGIONS = {
+    "NSW": "AU-NSW",
+    "VIC": "AU-VIC",
+    "QLD": "AU-QLD",
+    "WA": "AU-WA",
+    "SA": "AU-SA",
+    "TAS": "AU-TAS",
+    "ACT": "AU-ACT",
+    "NT": "AU-NT",
+}
+
+# A smaller box for pilots: (south, west, north, east). Greater Sydney.
+PILOT_BBOX = {"sydney": (-34.17, 150.52, -33.42, 151.35)}
+
+OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+OVERPASS_TIMEOUT = 300          # seconds the server may spend on a query
+PAUSE_BETWEEN_QUERIES = 10      # be polite to the free public server
+
+# Website enrichment
+USER_AGENT = "Mozilla/5.0 (compatible; BusinessDirectoryBot/0.1; contact: you@example.com)"
+REQUEST_TIMEOUT = 15
+MAX_WORKERS = 8                 # parallel website fetches
+EXTRA_PAGES = ["/contact", "/contact-us", "/about", "/about-us"]
+
+DB_PATH = "businesses.db"

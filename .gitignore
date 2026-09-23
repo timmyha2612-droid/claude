@@ -1,0 +1,5 @@
+businesses.db
+*.db-journal
+*.csv
+__pycache__/
+.venv/
