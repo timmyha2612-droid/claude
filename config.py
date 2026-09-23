@@ -54,7 +54,7 @@ PAUSE_BETWEEN_QUERIES = 10      # be polite to the free public server
 # Website enrichment
 # Put YOUR email after "contact:". OpenStreetMap and website owners use it to reach you
 # instead of blocking you. The scripts refuse to run while it still says you@example.com.
-CONTACT_EMAIL = "you@example.com"
+CONTACT_EMAIL = "timmyha2612@gmail.com"
 USER_AGENT = f"Mozilla/5.0 (compatible; BusinessDirectoryBot/0.1; contact: {CONTACT_EMAIL})"
 # OpenStreetMap's server refuses (error 406) anything that looks like a browser or a bare script.
 # It wants a plain app name plus a contact.
