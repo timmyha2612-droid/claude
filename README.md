@@ -24,7 +24,7 @@ one local database (`businesses.db`). Every step is safe to re-run.
 | 5 | `python3 abr_match.py --category food_wholesaler` | ABN, legal name, active status | Free (GUID) |
 | 6 | `python3 find_people.py hunter --category food_wholesaler --limit 20` | Named staff from website domain | Free tier |
 | 6b | `python3 find_people.py apollo apollo_export.csv` | Import people exported from Apollo | Free tier |
-| 7 | `python3 export.py` | Report + `businesses_export.csv` + `people_export.csv` | Free |
+| 7 | `python3 export.py` | Report + `businesses_export.csv` + `people_export.csv`. The CSV starts with `best_email` (personal Gmail first) and `best_phone` (mobile first) | Free |
 
 Setting keys: Mac/Linux `export ABR_GUID=...`, Windows `set ABR_GUID=...` (same for HUNTER_API_KEY).
 
@@ -41,7 +41,7 @@ Setting keys: Mac/Linux `export ABR_GUID=...`, Windows `set ABR_GUID=...` (same 
     python3 collect_osm.py --category all --state all     # Australia-wide, run overnight
 
 After adding any new data, re-run merge.py, then enrich_web.py (it only processes new rows).
-`python3 enrich_web.py --retry-errors` retries failed websites.
+`python3 enrich_web.py --retry-errors` retries failed websites. `python3 enrich_web.py --refresh` re-checks sites already done (use once after the scraper is improved).
 
 ## Categories
 

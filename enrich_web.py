@@ -9,8 +9,10 @@ Usage:
   python3 enrich_web.py              (all pending businesses)
   python3 enrich_web.py --limit 50   (test on a small batch)
   python3 enrich_web.py --retry-errors
+  python3 enrich_web.py --refresh      (re-check sites already done, after the scraper improves)
 """
 import argparse
+import json
 import re
 import threading
 import time
@@ -44,10 +46,12 @@ FREEMAIL = {"gmail.com", "outlook.com", "hotmail.com", "live.com", "live.com.au"
 CREDIT_RE = re.compile(r"(web\s?site|site|design(ed)?|developed|built|powered|made|created|web design)\s+(by|with)|web design", re.I)
 # Australian phone numbers: 02 9123 4567, (02) 9123 4567, +61 2 9123 4567, 0412 345 678, 1300 123 456
 PHONE_RE = re.compile(
-    r"(?:\+61\s?|\b0)4\d{2}[\s\-]?\d{3}[\s\-]?\d{3}\b"            # mobiles
-    r"|(?:\+61\s?\(?0?|\(?0)[2378]\)?[\s\-]?\d{4}[\s\-]?\d{4}\b"  # landlines
-    r"|\b1[38]00[\s\-]?\d{3}[\s\-]?\d{3}\b"                        # 1300 / 1800
+    r"(?:\+61\s?\(?0?\)?\s?|\b0)4(?:[\s\-.]?\d){8}\b"                     # mobiles, any spacing
+    r"|(?:\+61\s?\(?0?\)?\s?|\(0|\b0)[2378]\)?(?:[\s\-.]?\d){8}\b"          # landlines
+    r"|\b1[38]00(?:[\s\-.]?\d){6}\b"                                        # 1300 / 1800
 )
+# Local numbers without area code, only when labelled: "Ph: 9123 4567", "Call us 9123-4567"
+LOCAL_PHONE_RE = re.compile(r"\b(?:ph(?:one)?|tel(?:ephone)?|call(?: us)?|p|t)\s*[:.]?\s*([2-9]\d{3}[\s\-.]?\d{4})\b", re.I)
 
 _local = threading.local()
 
@@ -80,6 +84,25 @@ def fetch(url):
     return r.text[:2_000_000], r.url
 
 
+def json_items(raw):
+    """Every (key, value) string pair anywhere inside a JSON-LD block."""
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return
+    stack = [data]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            for k, v in node.items():
+                if isinstance(v, str):
+                    yield k, v
+                else:
+                    stack.append(v)
+        elif isinstance(node, list):
+            stack.extend(node)
+
+
 def site_domain(url):
     host = urlparse(url).netloc.lower().split(":")[0]
     return host[4:] if host.startswith("www.") else host
@@ -100,7 +123,7 @@ def decode_cfemail(hexstr):
         return ""
 
 
-def extract(html, page_url):
+def extract(html, page_url, local_code=None):
     found = {"instagram": set(), "facebook": set(), "linkedin": set(), "tiktok": set(), "email": set(), "phone": set()}
     soup = BeautifulSoup(html, "html.parser")
     own_domain = site_domain(page_url)
@@ -147,6 +170,14 @@ def extract(html, page_url):
     for el in soup.select("[data-cfemail]"):
         found["email"].add(decode_cfemail(el["data-cfemail"]).lower())
 
+    # Business details many sites put in page code for Google (schema.org JSON-LD)
+    for tag in soup.find_all("script", type="application/ld+json"):
+        for key, value in json_items(tag.string or ""):
+            if key == "telephone":
+                found["phone"].add(value)
+            elif key == "email":
+                found["email"].add(value.replace("mailto:", "").strip().lower())
+
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
     text = soup.get_text(" ")
@@ -154,6 +185,9 @@ def extract(html, page_url):
         found["email"].add(e.lower())
     for ph in PHONE_RE.findall(text):
         found["phone"].add(re.sub(r"[^\d+]", "", ph))
+    if local_code:
+        for ph in LOCAL_PHONE_RE.findall(text):
+            found["phone"].add(f"+61{local_code}{re.sub(r'[^0-9]', '', ph)}")
 
     found["email"] = {
         e for e in found["email"]
@@ -183,14 +217,14 @@ def fetch_homepage(website):
         return fetch("http://" + website[len("https://"):])
 
 
-def enrich_one(business_id, website):
+def enrich_one(business_id, website, local_code=None):
     """Returns (business_id, status, note, list_of_contacts, seconds). No DB access here (thread safe)."""
     start = time.monotonic()
-    status, note, contacts = enrich_site(website)
+    status, note, contacts = enrich_site(website, local_code)
     return business_id, status, note, contacts, time.monotonic() - start
 
 
-def enrich_site(website):
+def enrich_site(website, local_code=None):
     try:
         website = first_website(website)
         host = urlparse(website).netloc.lower()
@@ -209,11 +243,12 @@ def enrich_site(website):
             return "error", "homepage not reachable", []
 
         domain = site_domain(final_url)
-        pages = [(final_url, extract(html, final_url))]
+        pages = [(final_url, extract(html, final_url, local_code))]
 
         def missing(f):
             has_own_email = any(email_is_own(e, domain) for e in f["email"])
-            return not has_own_email or not (f["instagram"] or f["facebook"])
+            has_phone = any(db.clean_contact("phone", p) for p in f["phone"])
+            return not has_own_email or not has_phone or not (f["instagram"] or f["facebook"])
 
         merged = {k: set(v) for k, v in pages[0][1].items()}
         for path in config.EXTRA_PAGES:
@@ -225,7 +260,7 @@ def enrich_site(website):
             except requests.RequestException:
                 continue
             if sub_html:
-                f = extract(sub_html, sub_url)
+                f = extract(sub_html, sub_url, local_code)
                 pages.append((sub_url, f))
                 for k in merged:
                     merged[k] |= f[k]
@@ -245,6 +280,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--retry-errors", action="store_true")
+    p.add_argument("--refresh", action="store_true", help="also re-check sites already done (contacts are never duplicated)")
     args = p.parse_args()
     config.require_contact_email()
 
@@ -256,8 +292,8 @@ def main():
     )
     conn.commit()
 
-    statuses = ("pending", "error") if args.retry_errors else ("pending",)
-    q = f"SELECT id, website FROM businesses WHERE enrich_status IN ({','.join('?' * len(statuses))})"
+    statuses = ["pending"] + (["error"] if args.retry_errors else []) + (["done"] if args.refresh else [])
+    q = f"SELECT id, website, state, lat, lon FROM businesses WHERE enrich_status IN ({','.join('?' * len(statuses))})"
     if args.limit:
         q += f" LIMIT {int(args.limit)}"
     todo = conn.execute(q, statuses).fetchall()
@@ -267,7 +303,10 @@ def main():
     timings = []
     started = time.monotonic()
     with ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as pool:
-        futures = [pool.submit(enrich_one, row["id"], row["website"]) for row in todo]
+        futures = [
+            pool.submit(enrich_one, row["id"], row["website"], db.area_code(row["state"], row["lat"], row["lon"]))
+            for row in todo
+        ]
         for fut in as_completed(futures):
             biz_id, status, note, contacts, seconds = fut.result()
             timings.append(seconds)

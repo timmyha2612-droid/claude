@@ -241,6 +241,60 @@ def social_url(kind, raw):
     return SOCIAL_BASE[kind] + handle
 
 
+STATE_AREA_CODE = {"NSW": "2", "ACT": "2", "VIC": "3", "TAS": "3", "QLD": "7", "SA": "8", "WA": "8", "NT": "8"}
+
+
+def area_code(state=None, lat=None, lon=None):
+    """Area code for local 8-digit numbers ("Ph 9123 4567"). None when unsure (near state borders)."""
+    code = STATE_AREA_CODE.get((state or "").upper().strip())
+    if code or lat is None or lon is None:
+        return code
+    if lat < -39.5:
+        return "3"                                   # Tasmania
+    if lon < 128.5 or 129.5 < lon < 140.5:
+        return "8"                                   # WA, SA, NT
+    if lat > -28.1 and lon > 138.5:
+        return "7"                                   # Queensland
+    if (-33.9 < lat < -29.2 and lon > 141.5) or (-37.0 < lat < -29.2 and lon > 149.0):
+        return "2"                                   # NSW / ACT
+    if (lat < -36.2 and 141.0 < lon < 147.5) or (lat < -37.6 and lon < 149.9):
+        return "3"                                   # Victoria
+    return None
+
+
+FREEMAIL = {"gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "live.com.au", "yahoo.com",
+            "yahoo.com.au", "icloud.com", "me.com", "bigpond.com", "bigpond.net.au", "optusnet.com.au", "iinet.net.au",
+            "tpg.com.au", "internode.on.net", "outlook.com.au", "hotmail.com.au", "protonmail.com", "proton.me"}
+GENERIC_MAILBOX = re.compile(
+    r"^(info|hello|hi|hey|admin|contact|enquir|inquir|bookings?|orders?|reservations?|events?|catering|sales|office|"
+    r"team|mail|customer|functions|careers|jobs|accounts?|feedback|support|reception|manager|marketing|media|"
+    r"press|wholesale|general|service|shop|store|cafe|coffee|eat|food|kitchen|bar|venue)", re.I)
+
+
+def email_rank(email, business_name=""):
+    """Lower is better. Personal Gmail first, then the business's Gmail, then personal, then info@/hello@."""
+    local, _, dom = email.partition("@")
+    words = [w for w in re.findall(r"[a-z]{4,}", (business_name or "").lower()) if w not in ("cafe", "coffee", "the")]
+    business_like = GENERIC_MAILBOX.match(local) or any(w in local for w in words)
+    free = dom in FREEMAIL
+    if free and not business_like:
+        return 0, "personal gmail" if "gmail" in dom else "personal freemail"
+    if free:
+        return 1, "business gmail" if "gmail" in dom else "business freemail"
+    if not business_like:
+        return 2, "personal"
+    return 3, "generic"
+
+
+def phone_rank(phone):
+    """Mobiles first (usually the owner), then landlines, then 1300/13 numbers."""
+    if phone.startswith("+614"):
+        return 0, "mobile"
+    if phone.startswith("+61"):
+        return 1, "landline"
+    return 2, "1300/13"
+
+
 def clean_email(raw):
     e = unquote((raw or "").strip()).lower().strip(".")
     if e.startswith("mailto:"):

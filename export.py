@@ -43,6 +43,19 @@ def report(conn):
     for r in conn.execute("SELECT enrich_status, COUNT(*) n FROM businesses GROUP BY 1"):
         print(f"  {r['enrich_status']:<12} {r['n']}")
 
+    unique_with = lambda where: conn.execute(
+        f"SELECT COUNT(DISTINCT COALESCE(b.group_id, -b.id)) FROM businesses b WHERE {where}").fetchone()[0]
+    has_phone = ("(b.phone IS NOT NULL AND b.phone<>'') OR EXISTS "
+                 "(SELECT 1 FROM contacts c WHERE c.business_id=b.id AND c.kind='phone')")
+    has_mobile = ("b.phone_norm LIKE '+614%' OR EXISTS "
+                  "(SELECT 1 FROM contacts c WHERE c.business_id=b.id AND c.kind='phone' AND c.value LIKE '+614%')")
+    has_email = "EXISTS (SELECT 1 FROM contacts c WHERE c.business_id=b.id AND c.kind='email')"
+    has_free = ("EXISTS (SELECT 1 FROM contacts c WHERE c.business_id=b.id AND c.kind='email' AND ("
+                + " OR ".join(f"c.value LIKE '%@{d}'" for d in sorted(db.FREEMAIL)) + "))")
+    print("\nMain goal (unique businesses):")
+    print(f"  any phone   {unique_with(has_phone):>6}   of which mobile {unique_with(has_mobile)}")
+    print(f"  any email   {unique_with(has_email):>6}   of which gmail/free mail {unique_with(has_free)}")
+
     print("\nBusinesses with at least one:")
     for k in KINDS:
         n = conn.execute("SELECT COUNT(DISTINCT business_id) FROM contacts WHERE kind=?", (k,)).fetchone()[0]
@@ -83,13 +96,24 @@ def export_businesses(conn, path, category, all_rows):
                     if v not in vals:
                         vals.append(v)
             merged[f"{k}s"] = " | ".join(vals)
+        emails = [e for e in merged["emails"].split(" | ") if e]
+        if emails:
+            best = min(emails, key=lambda e: db.email_rank(e, merged["name"])[0])
+            merged["best_email"], merged["email_type"] = best, db.email_rank(best, merged["name"])[1]
+        phones = [p for p in merged["phones"].split(" | ") if p]
+        phones += [c[1] for m in members for c in [db.clean_contact("phone", m["phone"])] if c and c[1] not in phones]
+        if phones:
+            best = min(phones, key=lambda p: db.phone_rank(p)[0])
+            merged["best_phone"], merged["phone_type"] = best, db.phone_rank(best)[1]
+            merged["phones"] = " | ".join(phones)
         merged["people_found"] = sum(people_count[m["id"]] for m in members)
         out.append(merged)
 
     out.sort(key=lambda r: (r["category"] or "", r["suburb"] or "", r["name"] or ""))
-    cols = ["business_key"] + FIELDS + [f"{k}s" for k in KINDS] + ["people_found", "sources", "source_ids"]
+    cols = (["business_key", "name", "best_email", "email_type", "best_phone", "phone_type"]
+            + [f for f in FIELDS if f != "name"] + [f"{k}s" for k in KINDS] + ["people_found", "sources", "source_ids"])
     with open(path, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=cols)
+        w = csv.DictWriter(f, fieldnames=cols, restval="")
         w.writeheader()
         w.writerows(out)
     print(f"\nExported {len(out)} businesses to {path}")

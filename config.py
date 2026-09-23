@@ -61,7 +61,8 @@ USER_AGENT = f"Mozilla/5.0 (compatible; BusinessDirectoryBot/0.1; contact: {CONT
 OSM_USER_AGENT = f"AusFoodBusinessDirectory/0.1 (contact: {CONTACT_EMAIL})"
 REQUEST_TIMEOUT = 15
 MAX_WORKERS = 8                 # parallel website fetches
-EXTRA_PAGES = ["/contact", "/contact-us", "/about", "/about-us"]
+# Pages checked (in order) until an email, phone and social are all found
+EXTRA_PAGES = ["/contact", "/contact-us", "/pages/contact", "/about", "/about-us", "/find-us", "/location", "/our-story"]
 
 DB_PATH = "businesses.db"
 
