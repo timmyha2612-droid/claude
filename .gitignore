@@ -3,3 +3,4 @@ businesses.db
 *.csv
 __pycache__/
 .venv/
+*.zip
