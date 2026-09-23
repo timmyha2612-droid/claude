@@ -118,6 +118,9 @@ def main():
     p.add_argument("--all-rows", action="store_true")
     args = p.parse_args()
     conn = db.connect(config.DB_PATH)
+    fixed = db.tidy_contacts(conn)
+    if fixed:
+        print(f"Tidied {fixed} contacts into the standard format")
     report(conn)
     export_businesses(conn, args.out, args.category, args.all_rows)
     export_people(conn, args.people_out)

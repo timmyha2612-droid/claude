@@ -24,29 +24,12 @@ from bs4 import BeautifulSoup
 import config
 import db
 
+# Any link to a social network. db.social_url decides whether it is a real profile
+# and turns it into one standard URL (junk like share buttons and Wix's own page is dropped there).
 SOCIAL_PATTERNS = {
-    "instagram": re.compile(r"https?://(?:www\.)?instagram\.com/([A-Za-z0-9_.]{2,30})/?", re.I),
-    "facebook": re.compile(r"https?://(?:www\.|m\.)?facebook\.com/(profile\.php\?id=\d+|[A-Za-z0-9.\-]{2,80})/?", re.I),
-    "linkedin": re.compile(r"https?://(?:[a-z]{2,3}\.)?linkedin\.com/(company|in)/([A-Za-z0-9\-_%]{2,100})/?", re.I),
-    "tiktok": re.compile(r"https?://(?:www\.)?tiktok\.com/@([A-Za-z0-9_.]{2,30})/?", re.I),
+    kind: re.compile(rf"https?://(?:[a-z]{{1,3}}\.)?(?:{host})/[^\s\"'<>)]+", re.I)
+    for kind, host in db.SOCIAL_HOST.items()
 }
-# Paths that look like profiles but are not
-SOCIAL_JUNK = {
-    "instagram": {"p", "reel", "reels", "explore", "stories", "accounts", "tv", "about", "legal", "developer", "direct", "web", "embed.js"},
-    "facebook": {"sharer", "sharer.php", "share", "share.php", "plugins", "tr", "dialog", "groups", "events", "watch", "profile.php",
-                 "pages", "login", "login.php", "home.php", "business", "policy.php", "privacy", "help", "legal", "ads", "photo.php",
-                 "people", "hashtag", "l.php", "flx", "fbml"},
-}
-# Accounts of website builders, delivery apps and the social networks themselves.
-# Their links sit in template footers and "order on" buttons, not the business's own.
-PLATFORM_HANDLES = {
-    "wix", "wixcom", "squarespace", "shopify", "wordpress", "wordpressdotcom", "weebly", "godaddy", "webflow",
-    "ubereats", "ubereats_aus", "ubereatsau", "ubereats_au", "doordash", "doordash_au", "doordashau", "menulog",
-    "deliveroo", "opentable", "opentableau", "mryum", "mryum_au", "hungrypanda", "square", "squareup",
-    "lightspeedhq", "instagram", "facebook", "meta", "tiktok", "linkedin", "google", "youtube", "twitter",
-}
-# Looks like a version number, year or file rather than a profile (facebook.com/2008/fbml, /v12.0/dialog, /embed.js)
-JUNK_HANDLE_RE = re.compile(r"^(\d{1,6}|v\d+(\.\d+)*)$|\.(js|php|css|png|jpe?g|gif|svg)$", re.I)
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 EMAIL_JUNK = re.compile(
     r"\.(png|jpe?g|gif|webp|svg)$|sentry|wixpress|example\.|domain\.com|@2x"
@@ -57,7 +40,7 @@ EMAIL_JUNK = re.compile(
 # Free mail / ISP domains a small business may legitimately use as its main email
 FREEMAIL = {"gmail.com", "outlook.com", "hotmail.com", "live.com", "live.com.au", "yahoo.com", "yahoo.com.au", "icloud.com",
             "me.com", "bigpond.com", "bigpond.net.au", "optusnet.com.au", "iinet.net.au", "tpg.com.au", "internode.on.net"}
-# Footer credits such as "Website by Pixel Agency": emails at that agency's domain are not the business's
+# Footer credits such as "Website by Pixel Agency": that agency's emails and socials are not the business's
 CREDIT_RE = re.compile(r"(web\s?site|site|design(ed)?|developed|built|powered|made|created|web design)\s+(by|with)|web design", re.I)
 # Australian phone numbers: 02 9123 4567, (02) 9123 4567, +61 2 9123 4567, 0412 345 678, 1300 123 456
 PHONE_RE = re.compile(
@@ -117,18 +100,6 @@ def decode_cfemail(hexstr):
         return ""
 
 
-def clean_handle(kind, m):
-    if kind == "linkedin":
-        return f"{m.group(1)}/{m.group(2)}".lower()
-    handle = m.group(1).rstrip(".")
-    if kind == "facebook" and handle.lower().startswith("profile.php?id="):
-        return handle.lower()
-    low = handle.lower()
-    if low in SOCIAL_JUNK.get(kind, set()) or low in PLATFORM_HANDLES or JUNK_HANDLE_RE.search(low):
-        return None
-    return low
-
-
 def extract(html, page_url):
     found = {"instagram": set(), "facebook": set(), "linkedin": set(), "tiktok": set(), "email": set(), "phone": set()}
     soup = BeautifulSoup(html, "html.parser")
@@ -138,22 +109,31 @@ def extract(html, page_url):
     hrefs = [a.get("href", "") for a in anchors]
     blob = " ".join(hrefs) + " " + html
 
-    for kind, pattern in SOCIAL_PATTERNS.items():
-        for m in pattern.finditer(blob):
-            handle = clean_handle(kind, m)
-            if handle:
-                found[kind].add(handle)
-
-    # domains credited as the site's designer/host ("Website by ...")
-    credit_domains = set()
+    # links next to "Website by ..." credits belong to the web designer
+    credit_domains, credit_socials = set(), set()
     for a in anchors:
         href = a.get("href", "")
         if not href.startswith("http"):
             continue
-        context = a.parent.get_text(" ", strip=True)[:200] if a.parent else ""
+        before = a.find_previous(string=True) or ""
+        if before and a in before.parents:
+            before = ""
+        context = str(before)[-60:] + " " + a.get_text(" ", strip=True)
+        if not CREDIT_RE.search(context):
+            continue
         d = site_domain(href)
-        if d and d != own_domain and CREDIT_RE.search(context):
+        if d and d != own_domain:
             credit_domains.add(d)
+        for kind in SOCIAL_PATTERNS:
+            url = db.social_url(kind, href) if SOCIAL_PATTERNS[kind].match(href) else None
+            if url:
+                credit_socials.add(url)
+
+    for kind, pattern in SOCIAL_PATTERNS.items():
+        for m in pattern.finditer(blob):
+            url = db.social_url(kind, m.group(0))
+            if url and url not in credit_socials:
+                found[kind].add(url)
 
     for h in hrefs:
         low = h.lower()
@@ -180,16 +160,6 @@ def extract(html, page_url):
         if EMAIL_RE.fullmatch(e) and not EMAIL_JUNK.search(e) and e.rsplit("@", 1)[-1] not in credit_domains
     }
     return found
-
-
-def normalise_social(kind, handle):
-    base = {
-        "instagram": "https://instagram.com/",
-        "facebook": "https://facebook.com/",
-        "linkedin": "https://linkedin.com/",
-        "tiktok": "https://tiktok.com/@",
-    }[kind]
-    return base + handle
 
 
 SOCIAL_HOSTS = ("facebook.com", "instagram.com", "linkedin.com", "tiktok.com", "linktr.ee")
@@ -224,9 +194,11 @@ def enrich_site(website):
     try:
         website = first_website(website)
         host = urlparse(website).netloc.lower()
+        if "." not in host:
+            return "no_website", f"not a real website: {website}", []
         if any(host == h or host.endswith("." + h) for h in SOCIAL_HOSTS):
             f = extract(f'<a href="{website}"></a>', website)
-            contacts = [(k, normalise_social(k, v), "website_field") for k in SOCIAL_PATTERNS for v in f[k]]
+            contacts = [(k, v, "website_field") for k in SOCIAL_PATTERNS for v in f[k]]
             return "social_only", "website field is a social page", contacts
 
         if not allowed_by_robots(website):
@@ -262,8 +234,7 @@ def enrich_site(website):
         for page_url, f in pages:
             for kind, values in f.items():
                 for v in values:
-                    value = normalise_social(kind, v) if kind in SOCIAL_PATTERNS else v
-                    contacts.append((kind, value, page_url))
+                    contacts.append((kind, v, page_url))
         return "done", f"{len(pages)} page(s) checked", contacts
 
     except Exception as exc:  # never let one bad site stop the batch

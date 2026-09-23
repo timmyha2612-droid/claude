@@ -81,6 +81,9 @@ def same_business(a, b):
 
 def main():
     conn = db.connect(config.DB_PATH)
+    fixed = db.tidy_contacts(conn)
+    if fixed:
+        print(f"Tidied {fixed} contacts into the standard format")
     rows = []
     for r in conn.execute("SELECT id, name, lat, lon, phone_norm, website FROM businesses"):
         rows.append({

@@ -100,6 +100,8 @@ def element_to_record(el, category, state_code):
     website = first(tags, "website", "contact:website", "url")
     if website:
         website = re.split(r"[;\s]+", website.strip())[0]   # some entries list several sites
+    if website and "." not in website:
+        website = None                                        # e.g. website=none
     if website and not website.startswith("http"):
         website = "https://" + website
 
