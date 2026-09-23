@@ -5,7 +5,7 @@ one local database (`businesses.db`). Every step is safe to re-run.
 
 ## Setup (once)
 
-1. Install Python 3.10+ from python.org
+1. Python 3.9 or newer. The one built into macOS works: check with `python3 --version`
 2. In this folder run: `python3 -m pip install -r requirements.txt`
    (on a Mac the command is always `python3`, never `python`)
 3. In `config.py`, replace `you@example.com` in `CONTACT_EMAIL` with your real email
