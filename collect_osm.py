@@ -39,20 +39,25 @@ def build_query(tag_filters, bbox=None, iso_area=None):
 
 
 def run_query(query, retries=3):
-    for attempt in range(1, retries + 1):
-        try:
-            r = requests.post(
-                config.OVERPASS_URL,
-                data={"data": query},
-                headers={"User-Agent": config.USER_AGENT},
-                timeout=config.OVERPASS_TIMEOUT + 30,
-            )
+    headers = {"User-Agent": config.OSM_USER_AGENT, "Accept": "application/json"}
+    for url in config.OVERPASS_URLS:
+        host = url.split("/")[2]
+        for attempt in range(1, retries + 1):
+            try:
+                r = requests.post(url, data={"data": query}, headers=headers, timeout=config.OVERPASS_TIMEOUT + 30)
+            except requests.RequestException as exc:
+                print(f"  {host}: request failed: {exc} (attempt {attempt})")
+                time.sleep(30 * attempt)
+                continue
             if r.status_code == 429 or r.status_code >= 500:
                 wait = 60 * attempt
-                print(f"  server busy ({r.status_code}), waiting {wait}s")
+                print(f"  {host}: server busy ({r.status_code}), waiting {wait}s")
                 time.sleep(wait)
                 continue
-            r.raise_for_status()
+            if r.status_code >= 400:
+                # 403/406 means this server refuses us; waiting will not help, try the next one
+                print(f"  {host}: refused the request ({r.status_code} {r.reason}), trying the next server")
+                break
             data = r.json()
             # Overpass answers 200 with a "remark" when it ran out of time or memory: the results are incomplete
             remark = data.get("remark", "")
@@ -60,10 +65,7 @@ def run_query(query, retries=3):
                 print(f"  WARNING: OpenStreetMap returned partial results: {remark}")
                 print("  Re-run this command later, or use a smaller area. Rows already saved are kept.")
             return data
-        except requests.RequestException as exc:
-            print(f"  request failed: {exc} (attempt {attempt})")
-            time.sleep(30 * attempt)
-    raise RuntimeError("Overpass query failed after retries")
+    raise RuntimeError("Every OpenStreetMap server refused or failed. Send this output to your developer.")
 
 
 def first(tags, *keys):

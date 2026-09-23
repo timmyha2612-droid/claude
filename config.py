@@ -42,7 +42,12 @@ REGIONS = {
 # A smaller box for pilots: (south, west, north, east). Greater Sydney.
 PILOT_BBOX = {"sydney": (-34.17, 150.52, -33.42, 151.35)}
 
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+# The main public server first, then public mirrors used if it refuses or is down
+OVERPASS_URLS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+]
 OVERPASS_TIMEOUT = 300          # seconds the server may spend on a query
 PAUSE_BETWEEN_QUERIES = 10      # be polite to the free public server
 
@@ -51,6 +56,9 @@ PAUSE_BETWEEN_QUERIES = 10      # be polite to the free public server
 # instead of blocking you. The scripts refuse to run while it still says you@example.com.
 CONTACT_EMAIL = "you@example.com"
 USER_AGENT = f"Mozilla/5.0 (compatible; BusinessDirectoryBot/0.1; contact: {CONTACT_EMAIL})"
+# OpenStreetMap's server refuses (error 406) anything that looks like a browser or a bare script.
+# It wants a plain app name plus a contact.
+OSM_USER_AGENT = f"AusFoodBusinessDirectory/0.1 (contact: {CONTACT_EMAIL})"
 REQUEST_TIMEOUT = 15
 MAX_WORKERS = 8                 # parallel website fetches
 EXTRA_PAGES = ["/contact", "/contact-us", "/about", "/about-us"]
