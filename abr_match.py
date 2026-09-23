@@ -9,9 +9,9 @@ then set it before running:
   Windows:    set ABR_GUID=your-guid
 
 Usage:
-  python abr_match.py --category food_wholesaler      (start with B2B targets)
-  python abr_match.py --limit 100
-  python abr_match.py                                 (everything not yet checked)
+  python3 abr_match.py --category food_wholesaler      (start with B2B targets)
+  python3 abr_match.py --limit 100
+  python3 abr_match.py                                 (everything not yet checked)
 """
 import argparse
 import json

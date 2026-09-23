@@ -3,13 +3,13 @@ Fill the people table (names, roles, emails, LinkedIn) for businesses.
 
 Option A - Hunter.io API (free plan has a small monthly allowance):
   export HUNTER_API_KEY=your-key
-  python find_people.py hunter --category food_wholesaler --limit 20
+  python3 find_people.py hunter --category food_wholesaler --limit 20
 
   Each website domain is only ever searched once (chains are searched once
   for all their stores), so you never waste credits on repeats.
 
 Option B - Apollo.io CSV export (use their website, export a people list):
-  python find_people.py apollo apollo_export.csv
+  python3 find_people.py apollo apollo_export.csv
 
   People are matched to businesses by website domain, then by company name.
 

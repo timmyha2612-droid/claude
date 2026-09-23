@@ -4,9 +4,9 @@ into the same database. It recognises the common column names from each
 tool, so you usually don't need to edit the CSV first.
 
 Usage:
-  python import_places.py outscraper_export.csv --category coffee_shop
-  python import_places.py apify_dataset.csv --category restaurant
-  python import_places.py export.xlsx ...   (save as CSV first)
+  python3 import_places.py outscraper_export.csv --category coffee_shop
+  python3 import_places.py apify_dataset.csv --category restaurant
+  python3 import_places.py export.xlsx ...   (save as CSV first)
 
 Run merge.py afterwards to link these rows to the matching OSM rows.
 """
@@ -143,7 +143,7 @@ def main():
                 conn.commit()
     conn.commit()
     print(f"\nImported {saved} businesses ({skipped} rows skipped with no name)")
-    print("Next: python merge.py, then python enrich_web.py for any new websites")
+    print("Next: python3 merge.py, then python3 enrich_web.py for any new websites")
 
 
 if __name__ == "__main__":

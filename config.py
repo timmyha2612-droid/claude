@@ -47,9 +47,19 @@ OVERPASS_TIMEOUT = 300          # seconds the server may spend on a query
 PAUSE_BETWEEN_QUERIES = 10      # be polite to the free public server
 
 # Website enrichment
-USER_AGENT = "Mozilla/5.0 (compatible; BusinessDirectoryBot/0.1; contact: you@example.com)"
+# Put YOUR email after "contact:". OpenStreetMap and website owners use it to reach you
+# instead of blocking you. The scripts refuse to run while it still says you@example.com.
+CONTACT_EMAIL = "you@example.com"
+USER_AGENT = f"Mozilla/5.0 (compatible; BusinessDirectoryBot/0.1; contact: {CONTACT_EMAIL})"
 REQUEST_TIMEOUT = 15
 MAX_WORKERS = 8                 # parallel website fetches
 EXTRA_PAGES = ["/contact", "/contact-us", "/about", "/about-us"]
 
 DB_PATH = "businesses.db"
+
+
+def require_contact_email():
+    if "example.com" in USER_AGENT or "@" not in USER_AGENT:
+        raise SystemExit(
+            "Stop: open config.py and replace you@example.com in CONTACT_EMAIL with your real email, then run again."
+        )

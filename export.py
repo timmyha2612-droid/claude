@@ -2,9 +2,9 @@
 Stage 3: coverage report + CSV exports.
 
 Usage:
-  python export.py                         -> businesses_export.csv + people_export.csv
-  python export.py --category coffee_shop --out sydney_cafes.csv
-  python export.py --all-rows              (one row per source instead of per business)
+  python3 export.py                         -> businesses_export.csv + people_export.csv
+  python3 export.py --category coffee_shop --out sydney_cafes.csv
+  python3 export.py --all-rows              (one row per source instead of per business)
 
 By default each real business is ONE row (after merge.py), with details and
 contacts combined from every source (OSM, Google, website, ABR).

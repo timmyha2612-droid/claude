@@ -2,12 +2,13 @@
 Stage 1: collect businesses from OpenStreetMap (free) through the Overpass API.
 
 Usage:
-  python collect_osm.py --category coffee_shop --bbox sydney
-  python collect_osm.py --category restaurant --state NSW
-  python collect_osm.py --category all --state all        (Australia-wide, slow)
+  python3 collect_osm.py --category coffee_shop --bbox sydney
+  python3 collect_osm.py --category restaurant --state NSW
+  python3 collect_osm.py --category all --state all        (Australia-wide, slow)
 """
 import argparse
 import json
+import re
 import time
 
 import requests
@@ -52,7 +53,13 @@ def run_query(query, retries=3):
                 time.sleep(wait)
                 continue
             r.raise_for_status()
-            return r.json()
+            data = r.json()
+            # Overpass answers 200 with a "remark" when it ran out of time or memory: the results are incomplete
+            remark = data.get("remark", "")
+            if "error" in remark.lower():
+                print(f"  WARNING: OpenStreetMap returned partial results: {remark}")
+                print("  Re-run this command later, or use a smaller area. Rows already saved are kept.")
+            return data
         except requests.RequestException as exc:
             print(f"  request failed: {exc} (attempt {attempt})")
             time.sleep(30 * attempt)
@@ -74,6 +81,8 @@ def element_to_record(el, category, state_code):
     street = " ".join(x for x in [tags.get("addr:housenumber"), tags.get("addr:street")] if x) or None
     sub = next((f"{k}={v}" for k, v in tags.items() if k in ("amenity", "shop", "craft", "industrial", "wholesale")), None)
     website = first(tags, "website", "contact:website", "url")
+    if website:
+        website = re.split(r"[;\s]+", website.strip())[0]   # some entries list several sites
     if website and not website.startswith("http"):
         website = "https://" + website
 
@@ -132,7 +141,7 @@ def collect(conn, category, bbox_name=None, state=None, raw_json=None):
     records = [element_to_record(el, category, state_code) for el in data.get("elements", [])]
     records = [r for r in records if r["name"]]
     save(conn, records)
-    print(f"  {category} / {bbox_name or state}: {len(records)} businesses saved")
+    print(f"  {category} / {bbox_name or state or 'file'}: {len(records)} businesses saved")
     return len(records)
 
 
@@ -144,6 +153,8 @@ def main():
     g.add_argument("--state", help="NSW, VIC... or 'all'")
     p.add_argument("--from-file", help="load a saved Overpass JSON instead of calling the API")
     args = p.parse_args()
+    if not args.from_file:
+        config.require_contact_email()
 
     conn = db.connect(config.DB_PATH)
     cats = list(config.CATEGORIES) if args.category == "all" else [args.category]

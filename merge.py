@@ -10,7 +10,7 @@ Two rows are linked when ANY of these is true:
   3. same website domain AND within 150 m      (chains share one domain too)
 
 Usage:
-  python merge.py
+  python3 merge.py
 """
 import math
 from collections import defaultdict
